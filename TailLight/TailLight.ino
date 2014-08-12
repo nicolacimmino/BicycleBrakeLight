@@ -1,10 +1,20 @@
-
+// TailLight implements logic for a smart bike tail light.
+//  Copyright (C) 2014 Nicola Cimmino
+//
+//    This program is free software: you can redistribute it and/or modify
+//    it under the terms of the GNU General Public License as published by
+//    the Free Software Foundation, either version 3 of the License, or
+//    (at your option) any later version.
+//
+//   This program is distributed in the hope that it will be useful,
+//    but WITHOUT ANY WARRANTY; without even the implied warranty of
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//    GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License
+//    along with this program.  If not, see http://www.gnu.org/licenses/.
+//
 #include <Serial.h>
-
-#define MASTER_LED_PIN 12
-#define SLAVE_LED_PIN 3
-#define DBG_LED_PIN 4
-#define N_FILTER_CHANNEL 2
 #define ACC_X_PIN 2
 #define ACC_Y_PIN 1
 #define ACC_Z_PIN 0
