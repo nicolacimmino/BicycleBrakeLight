@@ -14,51 +14,96 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see http://www.gnu.org/licenses/.
 //
-#include <Serial.h>
-#define ACC_X_PIN 2
-#define ACC_Y_PIN 1
+
+// Z-Axis is parallel to the direction of travel.
 #define ACC_Z_PIN 0
+
+// We filter data sampled from the z-axis and keep
+//  a running average of this length.
+#define zAxisRunningAverageLen 10
+
+// Interval between accelerometer samples in mS.
+#define samplingInterval 50
+
+// Hysteresis in mS of the brake light once it lights up.
+#define brakeLightHysteresis 500
+
+// This is a circular buffer we use to store the last
+//  n samples so that we can keep calucating the running
+//  average.
+int zAxisSamples[zAxisRunningAverageLen];
+int zAxisBufferIndex = 0;    
+int total = 0;               
+
+#define ACCELEROMETER_PWR 6
+#define ACCELEROMETER_VIN 13
+#define ACCELEROMETER_GND A3
+#define ACCELEROMETER_X A2
+#define ACCELEROMETER_Y A1
+#define ACCELEROMETER_Z A0
+#define LED_A 12
+#define LED_K 11
 
 void setup(){
 
-  //// power up devices
-  pinMode(6, OUTPUT);
-  digitalWrite(6, HIGH);
+  // Power up the acceletometer
+  pinMode(ACCELEROMETER_PWR, OUTPUT);
+  digitalWrite(ACCELEROMETER_PWR, HIGH);
+  pinMode(ACCELEROMETER_GND, OUTPUT);
+  digitalWrite(ACCELEROMETER_GND, LOW);
   
-  pinMode(13, OUTPUT);
-  digitalWrite(13, HIGH);
+  // Give 5v on the accelerometer Vin, this is used
+  //  to generate the analog outputs.
+  pinMode(ACCELEROMETER_VIN, OUTPUT);
+  digitalWrite(ACCELEROMETER_VIN, HIGH);
   
-  pinMode(A3, OUTPUT);
-  digitalWrite(A3, LOW);
-  
-  pinMode(A0, INPUT);
-  pinMode(A1, INPUT);
-  pinMode(A2, INPUT);
+  // Accelerometer outputs
+  pinMode(ACCELEROMETER_X, INPUT);
+  pinMode(ACCELEROMETER_Y, INPUT);
+  pinMode(ACCELEROMETER_Z, INPUT);
 
-  pinMode(12, OUTPUT);
-  pinMode(11, OUTPUT);
+  // LED off.
+  pinMode(LED_A, OUTPUT);
+  digitalWrite(LED_A, HIGH);
+  digitalWrite(LED_K, LOW);
+  pinMode(LED_K, OUTPUT);
   
-  digitalWrite(11, LOW);
-  digitalWrite(12, HIGH);
-	
-  //////
-
-  Serial.begin(9600);
-  
+  for (int thisReading = 0; thisReading < zAxisRunningAverageLen; thisReading++)
+    zAxisSamples[thisReading] = 0;
+    
 }
 
 void loop(){
 	
-	int x = analogRead(A0);
-	
-	if(x<180) {
-		digitalWrite(12, HIGH);
-		delay(500);
-	} else {
-		digitalWrite(12, LOW);
-	}
-	
-	Serial.println(x);
+  // subtract the oldest reading from the total
+  total= total - zAxisSamples[zAxisBufferIndex];         
+ 
+  // Get a new sample and store it at the current
+  //  position of the circular buffer and add to the total
+  zAxisSamples[zAxisBufferIndex] = analogRead(ACC_Z_PIN); 
+  total= total + zAxisSamples[zAxisBufferIndex];       
+  
+  // Move to the next  position and wrap around if we are
+  // at the end of the array.  
+  zAxisBufferIndex = zAxisBufferIndex + 1;                    
+  if(zAxisBufferIndex >= zAxisRunningAverageLen) {
+    zAxisBufferIndex = 0;                         
+  }  
+      
+  
+  int average = total / zAxisRunningAverageLen;
+
+  // We consider braking values inside a certain window, this was determined
+  //  empirically. Calibration will be needed.
+  if(average>180 && average<230) {
+    digitalWrite(12, HIGH);
+    delay(brakeLightHysteresis);
+  } else {
+    digitalWrite(12, LOW);
+  }
+  	
+  delay(samplingInterval);
+        
 }
 
 
