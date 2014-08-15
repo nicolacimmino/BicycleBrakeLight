@@ -15,12 +15,18 @@
 //    along with this program.  If not, see http://www.gnu.org/licenses/.
 //
 
+#include <EEPROM.h>
+
 // Z-Axis is parallel to the direction of travel.
-#define ACC_Z_PIN 0
+// Y-Axis is the vertical.
+#define ACC_X_PIN 0
+#define ACC_Y_PIN 1
+#define ACC_Z_PIN 2
+
 
 // We filter data sampled from the z-axis and keep
 //  a running average of this length.
-#define zAxisRunningAverageLen 10
+#define accelerometerRunningAverageLen 10
 
 // Interval between accelerometer samples in mS.
 #define samplingInterval 50
@@ -31,7 +37,7 @@
 // This is a circular buffer we use to store the last
 //  n samples so that we can keep calucating the running
 //  average.
-int zAxisSamples[zAxisRunningAverageLen];
+int zAxisSamples[accelerometerRunningAverageLen];
 int zAxisBufferIndex = 0;    
 int total = 0;               
 
@@ -43,7 +49,14 @@ int total = 0;
 #define ACCELEROMETER_Z A0
 #define LED_A 12
 #define LED_K 11
+#define LED_STATUS 9
 
+#define EEPROM_CALIBRAION_BASE 0
+
+// Accelerometer pins in an array so we can access them programmatically
+//  in sequence.
+int accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
+    
 void setup(){
 
   // Power up the acceletometer
@@ -68,8 +81,68 @@ void setup(){
   digitalWrite(LED_K, LOW);
   pinMode(LED_K, OUTPUT);
   
-  for (int thisReading = 0; thisReading < zAxisRunningAverageLen; thisReading++)
+  // Status LED
+  pinMode(LED_STATUS, OUTPUT);
+  digitalWrite(LED_STATUS, LOW);
+  
+  for (int thisReading = 0; thisReading < accelerometerRunningAverageLen; thisReading++)
     zAxisSamples[thisReading] = 0;
+    
+  Serial.begin(9600);
+  
+  for(int ix=0; ix<6; ix++)
+  {
+    Serial.print(EEPROM.read(ix));
+    Serial.print(" ");
+  }
+  Serial.println("");
+}
+
+void calibrate()
+{
+  Serial.println("Calibrating....");
+  
+  long startTime = millis();  
+  
+  int maxValues[] = { 0, 0, 0 };
+  int minValues[] = { 1024, 1024, 1024 };
+  
+  // Calibrate for 30s
+  while(millis() - startTime < 30000)
+  {
+    // Blink status at 1Hz during calibration.
+    digitalWrite(LED_STATUS, ((millis() % 1000)<500)?HIGH:LOW);
+    
+    for(int axis=0; axis<3; axis++) {
+      long total = 0;
+      for(int sample=0; sample<accelerometerRunningAverageLen; sample++) {
+        total += analogRead(accelerometerPins[axis])/2;
+        delay(samplingInterval);
+      }
+      int average = total/accelerometerRunningAverageLen;
+      if(average > maxValues[axis]) {
+        maxValues[axis] = average;
+      }
+      
+      if(average < minValues[axis]) {
+        minValues[axis] = average;
+      }
+    }
+  }
+  
+  // Sore in EEPROM. We use locations from EEPROM_CALIBRAION_BASE as:
+  // ZeroX, KX, ZeroY, KY, ZeroZ, KZ
+  // Where Zero* is the value corresponding to 0g on the axis and
+  // K* is the value representing 1g.
+  for(int axis=0; axis<3; axis++) {
+    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2), minValues[axis]+(maxValues[axis]-minValues[axis])/2);
+    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2)+1, (maxValues[axis]-minValues[axis])/2);
+  }
+  
+  // Blink status at 1Hz during calibration.
+  digitalWrite(LED_STATUS, LOW);
+  
+  Serial.println("Calibration done.");
     
 }
 
@@ -86,12 +159,12 @@ void loop(){
   // Move to the next  position and wrap around if we are
   // at the end of the array.  
   zAxisBufferIndex = zAxisBufferIndex + 1;                    
-  if(zAxisBufferIndex >= zAxisRunningAverageLen) {
+  if(zAxisBufferIndex >= accelerometerRunningAverageLen) {
     zAxisBufferIndex = 0;                         
   }  
       
   
-  int average = total / zAxisRunningAverageLen;
+  int average = total / accelerometerRunningAverageLen;
 
   // We consider braking values inside a certain window, this was determined
   //  empirically. Calibration will be needed.
@@ -103,7 +176,17 @@ void loop(){
   }
   	
   delay(samplingInterval);
-        
+  
+  Serial.print("X:");
+  Serial.print(((signed int)analogRead(ACC_X_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+0))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+1));
+  Serial.print(" Y:");
+  Serial.print(((signed int)analogRead(ACC_Y_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+2))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+3));
+  Serial.print(" Z:");
+  Serial.println(((signed int)analogRead(ACC_Z_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+4))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+5));
+  
+  if(Serial.read()=='c') {
+    calibrate();
+  }  
 }
 
 
