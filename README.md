@@ -15,6 +15,18 @@ A running average is a smoothing process that is achieved by averaging the last 
 
 ![Frequency Response](Documentation/RunningAverageFreqResp.gif)
 
+For a filter length N=20 the normalized frequency response looks like this:
 
+![Frequency Response](Documentation/RunningAverageFreqPlot.png)
 
+So we can expect an out of band rejection of roughly 10dB. By calculating values for the above formula we also see that the -3dB cut-off happens at a normalized frequency of 0.03. So I choose a sampling frequency of 40Hz that places the cut-off at 1.2Hz with filter length N=20.
+
+It should be noted that the longer the filter the steeper the roll off. A longer filter requires also an higer sampling frequency to achieve the same cut-off frequency.
+
+So, for a first experiment, I decided to go with a sampling frequency of 40Hz, filter length N=20 expecting a 3dB cut-off at 1.2Hz which seems adequate to filter out road bumps. Results were not bad in road tests with the LED lighting up at every brake except the slowest ones. Results were not excellent though and often potholes and rough roads caused the light to intermmitently come up.
+
+Calibration
+============
+
+The chosen accelerometer type outputs the read values as an analog value, for this reason calibration is needed to convert such values, once sampled, to actual acceleration. For this system a simple calibration procedure has been chosen that uses earth gravity as reference. When the device is placed in calibration mode it will simply read all axes acceleration for 10 seconds and store the maximum and minimum values read for each axis. The operator is supposed to slowly rotate the device on all 6 sides so that each axis is exposed to accelerations of +1g to -1g. Of course this system is not optimal and requires to move the device slowly during calibration. Results can be verified after calibration ensuring +1g and -1g values are reported for all axes.
 
