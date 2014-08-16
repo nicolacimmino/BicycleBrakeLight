@@ -23,13 +23,20 @@
 #define ACC_Y_PIN 1
 #define ACC_Z_PIN 2
 
-
-// We filter data sampled from the z-axis and keep
-//  a running average of this length.
+// We use a running average filter to get rid of noise 
+//  but also of unwanted spikes from vibrations and
+//  road bumps. A running average filter is a low pass
+//  with normalized cut off frequency of:
+//  
+//  Fc=0.44294/sqrt(N^2-1)
+//
+//  With a lenghth of 20 we get Fc=0.0221 which corresponds
+//  to a cut off frequency of 0.8Hz for a sampling frequency of 40Hz.
+// 
+// Filter length
 #define accelerometerRunningAverageLen 20
-
-// Interval between accelerometer samples in mS.
-#define samplingInterval 100
+// Interval between accelerometer samples in mS. This is a sampling frequency of 40Hz
+#define samplingInterval 25
 
 // Hysteresis in mS of the brake light once it lights up.
 #define brakeLightHysteresis 500
@@ -184,10 +191,8 @@ void loop(){
     samplesBufferIndex = 0;                         
   }  
   
-  double vectorMagnitude = sqrt((average[X_AXIS]*average[X_AXIS])+(average[Z_AXIS]*average[Z_AXIS]));
-  vectorMagnitude = sqrt((vectorMagnitude*vectorMagnitude)+(average[Y_AXIS]*average[Y_AXIS]));
   
-  if(vectorMagnitude < 0.85)
+  if(average[X_AXIS] < -0.1)
   {
     digitalWrite(LED_A, HIGH);
     //delay(brakeLightHysteresis);
@@ -203,8 +208,6 @@ void loop(){
   Serial.print(average[1]);
   Serial.print(" Z:");
   Serial.print(average[2]);
-  Serial.print(" A:");
-  Serial.println(vectorMagnitude);
   
   if(Serial.read()=='c') {
     calibrate();
