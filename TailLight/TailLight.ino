@@ -26,10 +26,10 @@
 
 // We filter data sampled from the z-axis and keep
 //  a running average of this length.
-#define accelerometerRunningAverageLen 10
+#define accelerometerRunningAverageLen 20
 
 // Interval between accelerometer samples in mS.
-#define samplingInterval 50
+#define samplingInterval 100
 
 // Hysteresis in mS of the brake light once it lights up.
 #define brakeLightHysteresis 500
@@ -37,9 +37,9 @@
 // This is a circular buffer we use to store the last
 //  n samples so that we can keep calucating the running
 //  average.
-int zAxisSamples[accelerometerRunningAverageLen];
-int zAxisBufferIndex = 0;    
-int total = 0;               
+double samplesBuffer[3][accelerometerRunningAverageLen];
+int samplesBufferIndex = 0;    
+double total[] = { 0, 0, 0 };               
 
 #define ACCELEROMETER_PWR 6
 #define ACCELEROMETER_VIN 13
@@ -49,14 +49,18 @@ int total = 0;
 #define ACCELEROMETER_Z A0
 #define LED_A 12
 #define LED_K 11
-#define LED_STATUS 9
+#define LED_STATUS 13
 
 #define EEPROM_CALIBRAION_BASE 0
 
 // Accelerometer pins in an array so we can access them programmatically
 //  in sequence.
 int accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
-    
+
+#define X_AXIS 0
+#define Y_AXIS 1
+#define Z_AXIS 2
+
 void setup(){
 
   // Power up the acceletometer
@@ -77,16 +81,19 @@ void setup(){
 
   // LED off.
   pinMode(LED_A, OUTPUT);
-  digitalWrite(LED_A, HIGH);
-  digitalWrite(LED_K, LOW);
+  digitalWrite(LED_A, LOW);
   pinMode(LED_K, OUTPUT);
+  digitalWrite(LED_K, LOW);
   
   // Status LED
-  pinMode(LED_STATUS, OUTPUT);
-  digitalWrite(LED_STATUS, LOW);
+  //pinMode(LED_STATUS, OUTPUT);
+  //digitalWrite(LED_STATUS, LOW);
   
-  for (int thisReading = 0; thisReading < accelerometerRunningAverageLen; thisReading++)
-    zAxisSamples[thisReading] = 0;
+  for(int axis=0; axis<3; axis++) {
+    for (int thisReading = 0; thisReading < accelerometerRunningAverageLen; thisReading++) {
+      samplesBuffer[axis][thisReading] = 0;
+    }
+  }
     
   Serial.begin(9600);
   
@@ -148,41 +155,56 @@ void calibrate()
 
 void loop(){
 	
-  // subtract the oldest reading from the total
-  total= total - zAxisSamples[zAxisBufferIndex];         
- 
-  // Get a new sample and store it at the current
-  //  position of the circular buffer and add to the total
-  zAxisSamples[zAxisBufferIndex] = analogRead(ACC_Z_PIN); 
-  total= total + zAxisSamples[zAxisBufferIndex];       
+  double average[] = { 0, 0, 0 };
   
-  // Move to the next  position and wrap around if we are
-  // at the end of the array.  
-  zAxisBufferIndex = zAxisBufferIndex + 1;                    
-  if(zAxisBufferIndex >= accelerometerRunningAverageLen) {
-    zAxisBufferIndex = 0;                         
-  }  
-      
-  
-  int average = total / accelerometerRunningAverageLen;
-
-  // We consider braking values inside a certain window, this was determined
-  //  empirically. Calibration will be needed.
-  if(average>180 && average<230) {
-    digitalWrite(12, HIGH);
-    delay(brakeLightHysteresis);
-  } else {
-    digitalWrite(12, LOW);
+  for(int axis=0; axis<3; axis++) {
+    // subtract the oldest reading from the total
+    total[axis] = total[axis] - samplesBuffer[axis][samplesBufferIndex];         
+   
+    // Get the current reading and convert to g according to the calibration table.
+    double currentReading = analogRead(accelerometerPins[axis])/2;
+    currentReading = (currentReading-EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2)))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
+    
+    // Clip to +/-1g so that potholes and other rough surfaces don't throw our running
+    //  average off with a sinle huge spike.
+    if(currentReading > 1) currentReading = 1;
+    if(currentReading < -1) currentReading = -1;
+    
+    // Store the current reading at the current position of the circular buffer and add to the total
+    samplesBuffer[axis][samplesBufferIndex] = currentReading; 
+    total[axis] = total[axis] + samplesBuffer[axis][samplesBufferIndex];       
+        
+    average[axis] = total[axis] / accelerometerRunningAverageLen;
   }
-  	
+
+  // Move to the next  position of the circular buffer and wrap around if we are
+  // at the end of the array.  
+  samplesBufferIndex = samplesBufferIndex + 1;                    
+  if(samplesBufferIndex >= accelerometerRunningAverageLen) {
+    samplesBufferIndex = 0;                         
+  }  
+  
+  double vectorMagnitude = sqrt((average[X_AXIS]*average[X_AXIS])+(average[Z_AXIS]*average[Z_AXIS]));
+  vectorMagnitude = sqrt((vectorMagnitude*vectorMagnitude)+(average[Y_AXIS]*average[Y_AXIS]));
+  
+  if(vectorMagnitude < 0.85)
+  {
+    digitalWrite(LED_A, HIGH);
+    //delay(brakeLightHysteresis);
+  } else {
+    digitalWrite(LED_A, LOW);
+  } 
+  
   delay(samplingInterval);
   
   Serial.print("X:");
-  Serial.print(((signed int)analogRead(ACC_X_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+0))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+1));
+  Serial.print(average[0]);
   Serial.print(" Y:");
-  Serial.print(((signed int)analogRead(ACC_Y_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+2))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+3));
+  Serial.print(average[1]);
   Serial.print(" Z:");
-  Serial.println(((signed int)analogRead(ACC_Z_PIN)/2-EEPROM.read(EEPROM_CALIBRAION_BASE+4))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+5));
+  Serial.print(average[2]);
+  Serial.print(" A:");
+  Serial.println(vectorMagnitude);
   
   if(Serial.read()=='c') {
     calibrate();
