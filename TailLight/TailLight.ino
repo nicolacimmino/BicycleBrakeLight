@@ -29,34 +29,68 @@
 // We use a running FIR (Finite Impulse Response) filter.
 // The filter taps have been calculated on http://t-filter.appspot.com/fir/index.html
 // The filter is set for:
-// Sampling frequency: 10Hz
+// Sampling frequency: 50Hz
 // Cut-off frequency: 1Hz (3 dB)
-// Out of band gain -40dB
-// A good approximation was got with 15 taps.
+// Out of band gain -40dB @ 3Hz
+// A good approximation was got with 45 taps, which means an insertion delay of 22 samples
+//  that translates to 440mS.
 //
 // Amount of taps.
-#define tapsCount 15
+#define tapsCount 45
 
-// Interval between accelerometer samples in mS. This is a sampling frequency of 10Hz
-#define samplingInterval 100
+// Interval between accelerometer samples in mS. This is a sampling frequency of 50Hz
+#define samplingInterval 20
+
+// Stores the timestamp of the last sample so that the next can be taken at the exact needed moment.
+long lastSampleTime = 0;
 
 // Filter taps. See above for filter parameters.
 float filterTaps[tapsCount] = {
-  -0.012592774787178462,
-  -0.027048334867068192,
-  -0.03115701603643162,
-  -0.0033516667471792812,
-  0.06651710329324825,
-  0.16356430487792203,
-  0.24972947322614572,
-  0.28427790826227656,
-  0.24972947322614572,
-  0.16356430487792203,
-  0.06651710329324825,
-  -0.0033516667471792812,
-  -0.03115701603643162,
-  -0.027048334867068192,
-  -0.012592774787178462 
+ -0.006131186283461786,
+  -0.004265851545443659,
+  -0.0053288619331861,
+  -0.006211546981940006,
+  -0.0067279433110651295,
+  -0.006721576285916211,
+  -0.006025433770098145,
+  -0.004483617720829534,
+  -0.001972374835461511,
+  0.0015854456585219477,
+  0.0062109924437529634,
+  0.011863098019709936,
+  0.01843423071064932,
+  0.025749428608301858,
+  0.03357038710961639,
+  0.04160616174876149,
+  0.04952949205603264,
+  0.0569965562647388,
+  0.06366815542232075,
+  0.06923046260786747,
+  0.07341419004423429,
+  0.0760119395442124,
+  0.07689277669772311,
+  0.0760119395442124,
+  0.07341419004423429,
+  0.06923046260786747,
+  0.06366815542232075,
+  0.0569965562647388,
+  0.04952949205603264,
+  0.04160616174876149,
+  0.03357038710961639,
+  0.025749428608301858,
+  0.01843423071064932,
+  0.011863098019709936,
+  0.0062109924437529634,
+  0.0015854456585219477,
+  -0.001972374835461511,
+  -0.004483617720829534,
+  -0.006025433770098145,
+  -0.006721576285916211,
+  -0.0067279433110651295,
+  -0.006211546981940006,
+  -0.0053288619331861,
+  -0.004265851545443659,
+  -0.006131186283461786
 };
 
 // This is a circular buffer we use to store the last tapsCount samples so that we can keep
@@ -82,7 +116,7 @@ int samplesBufferIndex = 0;
 
 // Accelerometer pins in an array so we can access them programmatically
 //  in sequence.
-int accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
+float accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
 
 // Indexes in array that store values for each axis.
 #define X_AXIS 0
@@ -171,7 +205,14 @@ void calibrate()
 }
 
 void loop(){
-	
+
+  // Wait right time for sampling.	
+  while(millis() - lastSampleTime < samplingInterval)
+  {
+    delay(1);
+  }
+  lastSampleTime = millis();
+  
   for(int axis=0; axis<3; axis++) {
     
     // Get the current reading and convert to g according to the calibration table.
@@ -205,9 +246,8 @@ void loop(){
     digitalWrite(LED_A, LOW);
   } 
   
-  delay(samplingInterval);
-  
-  Serial.print("X:");
+  Serial.print(millis());
+  Serial.print(" X:");
   Serial.print(filterOutput[0]);
   Serial.print(" Y:");
   Serial.print(filterOutput[1]);
