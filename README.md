@@ -29,6 +29,16 @@ It should be noted that the longer the filter the steeper the roll off. A longer
 
 So, for a first experiment, I decided to go with a sampling frequency of 40Hz, filter length N=20 expecting a 3dB cut-off at 1.2Hz which seems adequate to filter out road bumps. Results were not bad in road tests with the LED lighting up at every brake except the slowest ones. Results were not excellent though and often potholes and rough roads caused the light to intermmitently come up.
 
+FIR Filter
+============
+
+A filter with a better frequency response is a FIR (Finite Impulse Response) filter. This is basically a convolution of the sampled signal with a set of pre-calculated values known as taps. As usual there are trade-off between the filter length (amount of taps) and the frequency response. 
+
+I kept the original target to shoot for a 1Hz low pass filter and used this online tool to calcullate the filter taps (http://t-filter.appspot.com/fir/index.html). In an attempt to reduce the amount of taps I kept the sampling frequency low at 10Hz so that I could get the 1Hz low pass with just 15 taps. The frequency response as plotted on the mentioned site can be seen below:
+
+![Frequency Response](Documentation/FIRFilterResponse.png)
+
+
 Calibration
 ============
 
