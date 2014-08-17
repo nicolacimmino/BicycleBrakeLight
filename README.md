@@ -38,6 +38,8 @@ I kept the original target to shoot for a 1Hz low pass filter and used this onli
 
 ![Frequency Response](Documentation/FIRFilterResponse.png)
 
+There are two issues with this filter. The first is the quite high ripple in-band, that is more than 2dB. This means that calibration will be rather off depending on the freuency of the components. The second problem is the rather low sampling frequency which will mean that any vibration from the road or bike parts above 5Hz will come back aliased in-band, and I can see lot of stuff moving above 5Hz on a bycicle. I decided to take it for a spin anyhow to see how it performed. It was much better than the running average one, as could be expected. At lower speeds there were no spurious LED blinks and modest brake efforts were detected. At higher speed though the LED sstarted to act quite erratically, most likely because of higher frequenncy components aliasing.
+
 
 Calibration
 ============
