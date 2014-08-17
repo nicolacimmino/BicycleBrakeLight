@@ -14,40 +14,59 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see http://www.gnu.org/licenses/.
 //
+// Note: the code below always samples and filters all three axes even though
+//  we take decision only based on the axis parallel to the direction of travel.
+//  This is as I going to use this as more generic code for other applications
+//  that will use all axis.
 
 #include <EEPROM.h>
 
-// Z-Axis is parallel to the direction of travel.
-// Y-Axis is the vertical.
+// X-Axis is parallel to the direction of travel.
 #define ACC_X_PIN 0
 #define ACC_Y_PIN 1
 #define ACC_Z_PIN 2
 
-// We use a running average filter to get rid of noise 
-//  but also of unwanted spikes from vibrations and
-//  road bumps. A running average filter is a low pass
-//  with normalized cut off frequency of:
-//  
-//  Fc=0.44294/sqrt(N^2-1)
+// We use a running FIR (Finite Impulse Response) filter.
+// The filter taps have been calculated on http://t-filter.appspot.com/fir/index.html
+// The filter is set for:
+// Sampling frequency: 10Hz
+// Cut-off frequency: 1Hz (3 dB)
+// Out of band gain -40dB
+// A good approximation was got with 15 taps.
 //
-//  With a lenghth of 20 we get Fc=0.0221 which corresponds
-//  to a cut off frequency of 0.8Hz for a sampling frequency of 40Hz.
-// 
-// Filter length
-#define accelerometerRunningAverageLen 20
-// Interval between accelerometer samples in mS. This is a sampling frequency of 40Hz
-#define samplingInterval 25
+// Amount of taps.
+#define tapsCount 15
 
-// Hysteresis in mS of the brake light once it lights up.
-#define brakeLightHysteresis 500
+// Interval between accelerometer samples in mS. This is a sampling frequency of 10Hz
+#define samplingInterval 100
 
-// This is a circular buffer we use to store the last
-//  n samples so that we can keep calucating the running
-//  average.
-double samplesBuffer[3][accelerometerRunningAverageLen];
+// Filter taps. See above for filter parameters.
+float filterTaps[tapsCount] = {
+  -0.012592774787178462,
+  -0.027048334867068192,
+  -0.03115701603643162,
+  -0.0033516667471792812,
+  0.06651710329324825,
+  0.16356430487792203,
+  0.24972947322614572,
+  0.28427790826227656,
+  0.24972947322614572,
+  0.16356430487792203,
+  0.06651710329324825,
+  -0.0033516667471792812,
+  -0.03115701603643162,
+  -0.027048334867068192,
+  -0.012592774787178462 
+};
+
+// This is a circular buffer we use to store the last tapsCount samples so that we can keep
+//  doing the FIR convolution.
+float samplesBuffer[3][tapsCount];
+
+// Current position in the circular buffer.
 int samplesBufferIndex = 0;    
-double total[] = { 0, 0, 0 };               
 
+// Pins assignement.
 #define ACCELEROMETER_PWR 6
 #define ACCELEROMETER_VIN 13
 #define ACCELEROMETER_GND A3
@@ -58,12 +77,14 @@ double total[] = { 0, 0, 0 };
 #define LED_K 11
 #define LED_STATUS 13
 
+// EEPROM map.
 #define EEPROM_CALIBRAION_BASE 0
 
 // Accelerometer pins in an array so we can access them programmatically
 //  in sequence.
 int accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
 
+// Indexes in array that store values for each axis.
 #define X_AXIS 0
 #define Y_AXIS 1
 #define Z_AXIS 2
@@ -91,25 +112,14 @@ void setup(){
   digitalWrite(LED_A, LOW);
   pinMode(LED_K, OUTPUT);
   digitalWrite(LED_K, LOW);
-  
-  // Status LED
-  //pinMode(LED_STATUS, OUTPUT);
-  //digitalWrite(LED_STATUS, LOW);
-  
+    
   for(int axis=0; axis<3; axis++) {
-    for (int thisReading = 0; thisReading < accelerometerRunningAverageLen; thisReading++) {
+    for (int thisReading = 0; thisReading < tapsCount; thisReading++) {
       samplesBuffer[axis][thisReading] = 0;
     }
   }
     
   Serial.begin(9600);
-  
-  for(int ix=0; ix<6; ix++)
-  {
-    Serial.print(EEPROM.read(ix));
-    Serial.print(" ");
-  }
-  Serial.println("");
 }
 
 void calibrate()
@@ -129,11 +139,11 @@ void calibrate()
     
     for(int axis=0; axis<3; axis++) {
       long total = 0;
-      for(int sample=0; sample<accelerometerRunningAverageLen; sample++) {
+      for(int sample=0; sample<tapsCount; sample++) {
         total += analogRead(accelerometerPins[axis])/2;
         delay(samplingInterval);
       }
-      int average = total/accelerometerRunningAverageLen;
+      int average = total/tapsCount;
       if(average > maxValues[axis]) {
         maxValues[axis] = average;
       }
@@ -162,40 +172,35 @@ void calibrate()
 
 void loop(){
 	
-  double average[] = { 0, 0, 0 };
-  
   for(int axis=0; axis<3; axis++) {
-    // subtract the oldest reading from the total
-    total[axis] = total[axis] - samplesBuffer[axis][samplesBufferIndex];         
-   
+    
     // Get the current reading and convert to g according to the calibration table.
-    double currentReading = analogRead(accelerometerPins[axis])/2;
-    currentReading = (currentReading-EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2)))/(double)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
+    float currentReading = analogRead(accelerometerPins[axis])/2;
+    currentReading = (currentReading-EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2)))/(float)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
     
-    // Clip to +/-1g so that potholes and other rough surfaces don't throw our running
-    //  average off with a sinle huge spike.
-    if(currentReading > 1) currentReading = 1;
-    if(currentReading < -1) currentReading = -1;
-    
-    // Store the current reading at the current position of the circular buffer and add to the total
+    // Store the current reading at the current position of the circular buffer.
     samplesBuffer[axis][samplesBufferIndex] = currentReading; 
-    total[axis] = total[axis] + samplesBuffer[axis][samplesBufferIndex];       
-        
-    average[axis] = total[axis] / accelerometerRunningAverageLen;
   }
 
   // Move to the next  position of the circular buffer and wrap around if we are
   // at the end of the array.  
   samplesBufferIndex = samplesBufferIndex + 1;                    
-  if(samplesBufferIndex >= accelerometerRunningAverageLen) {
+  if(samplesBufferIndex >= tapsCount) {
     samplesBufferIndex = 0;                         
   }  
   
+  // Calculate FIR filter output for each axis.
+  float filterOutput[] = { 0, 0, 0 };
+  for(int axis=0; axis<3; axis++) {
+    for(int ix=0;ix<tapsCount;ix++) {
+      int index = (ix+samplesBufferIndex) % tapsCount;
+      filterOutput[axis] += samplesBuffer[axis][index] * filterTaps[ix];
+    }
+  }
   
-  if(average[X_AXIS] < -0.1)
+  if(filterOutput[X_AXIS] < -0.1)
   {
     digitalWrite(LED_A, HIGH);
-    //delay(brakeLightHysteresis);
   } else {
     digitalWrite(LED_A, LOW);
   } 
@@ -203,11 +208,11 @@ void loop(){
   delay(samplingInterval);
   
   Serial.print("X:");
-  Serial.print(average[0]);
+  Serial.print(filterOutput[0]);
   Serial.print(" Y:");
-  Serial.print(average[1]);
+  Serial.print(filterOutput[1]);
   Serial.print(" Z:");
-  Serial.print(average[2]);
+  Serial.println(filterOutput[2]);
   
   if(Serial.read()=='c') {
     calibrate();
