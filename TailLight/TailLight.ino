@@ -233,9 +233,10 @@ void loop(){
   // Calculate FIR filter output for each axis.
   float filterOutput[] = { 0, 0, 0 };
   for(int axis=0; axis<3; axis++) {
+    int sampleIndex = samplesBufferIndex;
     for(int ix=0;ix<tapsCount;ix++) {
-      int index = (ix+samplesBufferIndex) % tapsCount;
-      filterOutput[axis] += samplesBuffer[axis][index] * filterTaps[ix];
+      sampleIndex = (sampleIndex>0)?sampleIndex-1:tapsCount-1;
+      filterOutput[axis] += samplesBuffer[axis][sampleIndex] * filterTaps[ix];
     }
   }
   
