@@ -16,7 +16,7 @@
 //
 // Note: the code below always samples and filters all three axes even though
 //  we take decision only based on the axis parallel to the direction of travel.
-//  This is as I going to use this as more generic code for other applications
+//  This is as I am going to use this as more generic code for other applications
 //  that will use all axis.
 
 #include <EEPROM.h>
@@ -240,11 +240,17 @@ void loop(){
     }
   }
   
-  if(filterOutput[X_AXIS] < -0.1)
+  // We have some hytesresis in the detector. We consider
+  //  braking above 0.05g and we get out of the breaking status
+  //  below 0.03g.  These values were empirically determined
+  //  in road tests.
+  if(filterOutput[X_AXIS] > -0.03)
+  {
+    digitalWrite(LED_A, LOW);
+  }
+  if(filterOutput[X_AXIS] < -0.05)
   {
     digitalWrite(LED_A, HIGH);
-  } else {
-    digitalWrite(LED_A, LOW);
   } 
   
   Serial.print(millis());
