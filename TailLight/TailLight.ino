@@ -225,10 +225,7 @@ void loop(){
 
   // Move to the next  position of the circular buffer and wrap around if we are
   // at the end of the array.  
-  samplesBufferIndex = samplesBufferIndex + 1;                    
-  if(samplesBufferIndex >= tapsCount) {
-    samplesBufferIndex = 0;                         
-  }  
+  samplesBufferIndex = (samplesBufferIndex + 1) % tapsCount;                    
   
   // Calculate FIR filter output for each axis.
   float filterOutput[] = { 0, 0, 0 };
