@@ -30,7 +30,7 @@ Results were not bad in road tests with the LED lighting up at every brake excep
 FIR Filter
 ============
 
-A filter with a better frequency response is a FIR (Finite Impulse Response) filter. This is basically a convolution of signal samples with a set of pre-calculated values known as taps. As usual there are trade-off between the filter length (amount of taps) and the frequency response. 
+A filter with a better frequency response is a FIR (Finite Impulse Response) filter. This is basically a convolution of signal samples with a set of pre-calculated values known as taps. As is often the case there is a trade-off between the filter length (amount of taps) and the frequency response. 
 
 I kept the original target to shoot for a 1Hz low pass filter and used this online tool to calcullate the filter taps (http://t-filter.appspot.com/fir/index.html). In an attempt to reduce the amount of taps I kept the sampling frequency low at 10Hz so that I could get the 1Hz low pass with just 15 taps. The frequency response as plotted on the mentioned site can be seen below:
 
@@ -38,7 +38,12 @@ I kept the original target to shoot for a 1Hz low pass filter and used this onli
 
 There are two issues with this filter. The first is the quite high ripple in-band, that is more than 2dB. This means that calibration will be rather off depending on the frequency of the acceleration components. The second problem is the rather low sampling frequency which will mean that any vibration from the road or bike parts above 5Hz will come back aliased in-band, and I can see lot of stuff moving above 5Hz on a bycicle. I decided to take it for a spin anyhow to see how it performed. It was much better than the running average one, as could be expected. At lower speeds there were no spurious LED blinks and modest brake efforts were detected. At higher speed though the LED started to act quite erratically, most likely because of higher frequenncy components aliasing.
 
-Back to the drawing board I got another filter designed with 50Hz sampling frequency and just 0.5dB ripple with only 45 taps. The amount of taps is, by the way, relevent not only because the microcontroller has limited RAM but also because the insertion delay of the filter is proportional to the filter length. To be more accurate is is equal to half of the taps count multiplied by the sampling interval. So for this filter the insertion delay is roughly 450mS.
+Back to the drawing board I got another filter designed with 50Hz sampling frequency and just 0.5dB ripple with 45 taps. The amount of taps is, by the way, relevent not only because the microcontroller has limited RAM but also because the insertion delay of the filter is proportional to the filter length. To be more accurate is is equal to half of the taps count multiplied by the sampling interval. So for this filter the insertion delay is roughly 450mS. During road tests this proved to be much more reliable. 
+
+Brake Detection
+============
+
+After testing a simple threshold detector I decided to have some hysteresis in the detector to avoid the light to shortly blink only in the beginning of the braking effort. At first I had roughly estimated a threshold of 0.1g. This in practice turned out to be a relatively vigourous brake effort so, experimentally, I dropped the threshold to 0.05g and the release threshold to 0.03g.  
 
 Calibration
 ============
