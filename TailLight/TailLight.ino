@@ -26,46 +26,48 @@
 #define ACC_Y_PIN 1
 #define ACC_Z_PIN 2
 
-// We use a running FIR (Finite Impulse Response) filter.
-// The filter taps have been calculated on http://t-filter.appspot.com/fir/index.html
-// The filter is set for:
-// Sampling frequency: 50Hz
+// We use an IIR (Infinite Impulse Response) filter to filter the accelleration.
+// The filter taps have been calculated in Octave.
+// The Low Pass filter is set for:
+// Sampling frequency: 100Hz
 // Cut-off frequency: 1Hz (3 dB)
-// Out of band gain -40dB @ 3Hz
-// A good approximation was got with 45 taps, which means an insertion delay of 22 samples
-//  that translates to 440mS.
-//
-// Amount of taps.
-#define tapsCount 45
+// Order: 3rd
+// 
+// Below we define this filter forward and feedback taps and the circular buffer used to hold the samples.
+#define accellFilterTapsCount 4
+float accellFilterForward_Taps[accellFilterTapsCount] = { 0.00002915, 0.00008744, 0.00008744, 0.00002915 };
+float accellFilterFeedback_Taps[accellFilterTapsCount] = { 1.0000, -2.8744, 2.7565, -0.8819 };
+float accellInputSamples[3][accellFilterTapsCount];
+float accellOutputSamples[3][accellFilterTapsCount];
+int accellSamplesBufferIndex = 0;
 
-// Interval between accelerometer samples in mS. This is a sampling frequency of 50Hz
-#define samplingInterval 20
+// We use an IIR (Infinite Impulse Response) filter to separate gravity effects from bike accelleration.
+// This is needed to remove the forward component of gravitational accelleration when we are on an incline.
+// This filter has a much lower cut-off frequency consideting slope is channhing more slowly than braking
+//  effort. This filter has a lower order than the other as a 3rd order one would have had too small forward
+//  coefficient values that woul have had issues with the limited precision of Arduino float.
+// The filter taps have been calculated in Octave.
+// The Low Pass filter is set for:
+// Sampling frequency: 100Hz
+// Cut-off frequency: 0.1Hz (3 dB)
+// Order: 2nd
+// 
+// Below we define this filter forward and feedback taps and the circular buffer used to hold the samples.
+#define gravityFilterTapsCount 3
+float gravityFilterForward_Taps[gravityFilterTapsCount] = {  0.00000983, 0.00001965, 0.00000983 };
+float gravityFilterFeedback_Taps[gravityFilterTapsCount] = { 1.0000, -1.9911, 0.9912 };
+float gravityInputSamples[3][gravityFilterTapsCount];
+float gravityOutputSamples[3][gravityFilterTapsCount];
+int gravitySamplesBufferIndex = 0;    
+
+// Interval between accelerometer samples in mS. This is a sampling frequency of 100Hz
+#define samplingInterval 10
 
 // Stores the timestamp of the last sample so that the next can be taken at the exact needed moment.
 long lastSampleTime = 0;
 
-// Filter taps. See above for filter parameters.
-float filterTaps[tapsCount] = {
- -0.006131186283461786, -0.004265851545443659, -0.0053288619331861, -0.006211546981940006,
- -0.0067279433110651295, -0.006721576285916211, -0.006025433770098145, -0.004483617720829534,
- -0.001972374835461511, 0.0015854456585219477, 0.0062109924437529634, 0.011863098019709936,
-  0.01843423071064932, 0.025749428608301858, 0.03357038710961639, 0.04160616174876149,
-  0.04952949205603264, 0.0569965562647388, 0.06366815542232075, 0.06923046260786747,
-  0.07341419004423429, 0.0760119395442124, 0.07689277669772311, 0.0760119395442124,
-  0.07341419004423429, 0.06923046260786747, 0.06366815542232075, 0.0569965562647388,
-  0.04952949205603264, 0.04160616174876149, 0.03357038710961639, 0.025749428608301858,
-  0.01843423071064932, 0.011863098019709936, 0.0062109924437529634, 0.0015854456585219477,
- -0.001972374835461511, -0.004483617720829534, -0.006025433770098145, -0.006721576285916211,
- -0.0067279433110651295, -0.006211546981940006, -0.0053288619331861, -0.004265851545443659,
- -0.006131186283461786
-};
-
-// This is a circular buffer we use to store the last tapsCount samples so that we can keep
-//  doing the FIR convolution.
-float samplesBuffer[3][tapsCount];
-
-// Current position in the circular buffer.
-int samplesBufferIndex = 0;    
+// Amount of samples averaged during calibration
+#define calibrationSamples 100
 
 // Pins assignement.
 #define ACCELEROMETER_PWR 6
@@ -113,13 +115,7 @@ void setup(){
   digitalWrite(LED_A, LOW);
   pinMode(LED_K, OUTPUT);
   digitalWrite(LED_K, LOW);
-    
-  for(int axis=0; axis<3; axis++) {
-    for (int thisReading = 0; thisReading < tapsCount; thisReading++) {
-      samplesBuffer[axis][thisReading] = 0;
-    }
-  }
-    
+       
   Serial.begin(9600);
 }
 
@@ -140,11 +136,11 @@ void calibrate()
     
     for(int axis=0; axis<3; axis++) {
       long total = 0;
-      for(int sample=0; sample<tapsCount; sample++) {
+      for(int sample=0; sample<calibrationSamples; sample++) {
         total += analogRead(accelerometerPins[axis])/2;
         delay(samplingInterval);
       }
-      int average = total/tapsCount;
+      int average = total/calibrationSamples;
       if(average > maxValues[axis]) {
         maxValues[axis] = average;
       }
@@ -164,6 +160,20 @@ void calibrate()
     EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2)+1, (maxValues[axis]-minValues[axis])/2);
   }
   
+  for(int axis=0; axis<3; axis++) 
+  {
+    for(int sampleIndex=0; sampleIndex<gravityFilterTapsCount; sampleIndex++)
+    {
+      gravityInputSamples[axis][sampleIndex] = 0;
+      gravityOutputSamples[axis][sampleIndex] = 0;
+    }
+    
+    for(int sampleIndex=0; sampleIndex<accellFilterTapsCount; sampleIndex++)
+    {
+      accellInputSamples[axis][sampleIndex] = 0;
+      accellOutputSamples[axis][sampleIndex] = 0;
+    }
+  }
   // Blink status at 1Hz during calibration.
   digitalWrite(LED_STATUS, LOW);
   
@@ -187,43 +197,61 @@ void loop(){
     currentReading = (currentReading-EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2)))/(float)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
     
     // Store the current reading at the current position of the circular buffer.
-    samplesBuffer[axis][samplesBufferIndex] = currentReading; 
+    accellInputSamples[axis][accellSamplesBufferIndex] = currentReading; 
+    gravityInputSamples[axis][gravitySamplesBufferIndex] = currentReading; 
   }
 
   // Move to the next  position of the circular buffer and wrap around if we are
   // at the end of the array.  
-  samplesBufferIndex = (samplesBufferIndex + 1) % tapsCount;                    
+  accellSamplesBufferIndex = (accellSamplesBufferIndex + 1) % accellFilterTapsCount;
+  gravitySamplesBufferIndex = (gravitySamplesBufferIndex + 1) % gravityFilterTapsCount;
   
-  // Calculate FIR filter output for each axis.
-  float filterOutput[] = { 0, 0, 0 };
+  
+  // Calculate both IIR filters output for each axis.
+  float accellOutput[] = { 0, 0, 0 };
+  float gravityOutput[] = { 0, 0, 0 };
+  
   for(int axis=0; axis<3; axis++) {
-    int sampleIndex = samplesBufferIndex;
-    for(int ix=0;ix<tapsCount;ix++) {
-      sampleIndex = (sampleIndex>0)?sampleIndex-1:tapsCount-1;
-      filterOutput[axis] += samplesBuffer[axis][sampleIndex] * filterTaps[ix];
+    int sampleIndex = accellSamplesBufferIndex;
+    for(int ix=0;ix<accellFilterTapsCount;ix++) {
+      sampleIndex = (sampleIndex>0)?sampleIndex-1:accellFilterTapsCount-1;
+      accellOutput[axis] += accellInputSamples[axis][sampleIndex] * accellFilterForward_Taps[ix] 
+                            - accellOutputSamples[axis][sampleIndex] * accellFilterFeedback_Taps[ix];
     }
+    accellOutputSamples[axis][accellSamplesBufferIndex] = accellOutput[axis];
+    
+    sampleIndex = gravitySamplesBufferIndex;
+    for(int ix=0;ix<gravitySamplesBufferIndex;ix++) {
+      sampleIndex = (sampleIndex>0)?sampleIndex-1:gravityFilterTapsCount-1;
+      gravityOutput[axis] += gravityInputSamples[axis][sampleIndex] * gravityFilterForward_Taps[ix] 
+                            - gravityOutputSamples[axis][sampleIndex] * gravityFilterFeedback_Taps[ix];
+    }
+    gravityOutputSamples[axis][gravitySamplesBufferIndex] = gravityOutput[axis];
   }
+  
+  // Work out the gravity component that is affecting the X-Axis (forward)
+  float forwardAccelleration = accellOutput[X_AXIS]/* * gravityOutput[Z_AXIS] + accellOutput[Z_AXIS] * gravityOutput[X_AXIS]*/;
   
   // We have some hytesresis in the detector. We consider
   //  braking above 0.05g and we get out of the breaking status
   //  below 0.03g.  These values were empirically determined
   //  in road tests.
-  if(filterOutput[X_AXIS] > -0.03)
+  if(forwardAccelleration > -0.03)
   {
     digitalWrite(LED_A, LOW);
   }
-  if(filterOutput[X_AXIS] < -0.05)
+  if(forwardAccelleration < -0.05)
   {
     digitalWrite(LED_A, HIGH);
   } 
   
   Serial.print(millis());
   Serial.print(" X:");
-  Serial.print(filterOutput[0]);
+  Serial.print(accellOutput[0]);
   Serial.print(" Y:");
-  Serial.print(filterOutput[1]);
+  Serial.print(accellOutput[1]);
   Serial.print(" Z:");
-  Serial.println(filterOutput[2]);
+  Serial.println(accellOutput[2]);
   
   if(Serial.read()=='c') {
     calibrate();
