@@ -54,8 +54,8 @@ int accellSamplesBufferIndex = 0;
 // 
 // Below we define this filter forward and feedback taps and the circular buffer used to hold the samples.
 #define gravityFilterTapsCount 3
-float gravityFilterForward_Taps[gravityFilterTapsCount] = {  0.00000983, 0.00001965, 0.00000983 };
-float gravityFilterFeedback_Taps[gravityFilterTapsCount] = { 1.0000, -1.9911, 0.9912 };
+float gravityFilterForward_Taps[gravityFilterTapsCount] = { 9.8259e-06, 1.9652e-05, 9.8259e-06 };
+float gravityFilterFeedback_Taps[gravityFilterTapsCount] = { 1.00000, -1.99111, 0.99115 };
 float gravityInputSamples[3][gravityFilterTapsCount];
 float gravityOutputSamples[3][gravityFilterTapsCount];
 int gravitySamplesBufferIndex = 0;    
@@ -65,6 +65,9 @@ int gravitySamplesBufferIndex = 0;
 
 // Stores the timestamp of the last sample so that the next can be taken at the exact needed moment.
 long lastSampleTime = 0;
+
+// Stores the timestamp of the last logged value to serial port.
+long lastSerialLog = 0;
 
 // Amount of samples averaged during calibration
 #define calibrationSamples 100
@@ -200,13 +203,7 @@ void loop(){
     accellInputSamples[axis][accellSamplesBufferIndex] = currentReading; 
     gravityInputSamples[axis][gravitySamplesBufferIndex] = currentReading; 
   }
-
-  // Move to the next  position of the circular buffer and wrap around if we are
-  // at the end of the array.  
-  accellSamplesBufferIndex = (accellSamplesBufferIndex + 1) % accellFilterTapsCount;
-  gravitySamplesBufferIndex = (gravitySamplesBufferIndex + 1) % gravityFilterTapsCount;
-  
-  
+   
   // Calculate both IIR filters output for each axis.
   float accellOutput[] = { 0, 0, 0 };
   float gravityOutput[] = { 0, 0, 0 };
@@ -214,23 +211,29 @@ void loop(){
   for(int axis=0; axis<3; axis++) {
     int sampleIndex = accellSamplesBufferIndex;
     for(int ix=0;ix<accellFilterTapsCount;ix++) {
+      accellOutput[axis] += accellInputSamples[axis][sampleIndex] * accellFilterForward_Taps[ix];
+      if(ix>0) accellOutput[axis] -= accellOutputSamples[axis][sampleIndex] * accellFilterFeedback_Taps[ix];
       sampleIndex = (sampleIndex>0)?sampleIndex-1:accellFilterTapsCount-1;
-      accellOutput[axis] += accellInputSamples[axis][sampleIndex] * accellFilterForward_Taps[ix] 
-                            - accellOutputSamples[axis][sampleIndex] * accellFilterFeedback_Taps[ix];
     }
     accellOutputSamples[axis][accellSamplesBufferIndex] = accellOutput[axis];
     
     sampleIndex = gravitySamplesBufferIndex;
-    for(int ix=0;ix<gravitySamplesBufferIndex;ix++) {
+    for(int ix=0;ix<gravityFilterTapsCount;ix++) {
+      gravityOutput[axis] += gravityInputSamples[axis][sampleIndex] * gravityFilterForward_Taps[ix];
+      if(ix>0)gravityOutput[axis] -= gravityOutputSamples[axis][sampleIndex] * gravityFilterFeedback_Taps[ix];
       sampleIndex = (sampleIndex>0)?sampleIndex-1:gravityFilterTapsCount-1;
-      gravityOutput[axis] += gravityInputSamples[axis][sampleIndex] * gravityFilterForward_Taps[ix] 
-                            - gravityOutputSamples[axis][sampleIndex] * gravityFilterFeedback_Taps[ix];
     }
     gravityOutputSamples[axis][gravitySamplesBufferIndex] = gravityOutput[axis];
   }
+
+  // Move to the next  position of the circular buffer and wrap around if we are
+  // at the end of the array.  
+  accellSamplesBufferIndex = (accellSamplesBufferIndex + 1) % accellFilterTapsCount;
+  gravitySamplesBufferIndex = (gravitySamplesBufferIndex + 1) % gravityFilterTapsCount;
   
+ 
   // Work out the gravity component that is affecting the X-Axis (forward)
-  float forwardAccelleration = accellOutput[X_AXIS]/* * gravityOutput[Z_AXIS] + accellOutput[Z_AXIS] * gravityOutput[X_AXIS]*/;
+  float forwardAccelleration = accellOutput[Z_AXIS] * gravityOutput[X_AXIS] - accellOutput[X_AXIS] * gravityOutput[Z_AXIS];
   
   // We have some hytesresis in the detector. We consider
   //  braking above 0.05g and we get out of the breaking status
@@ -245,17 +248,29 @@ void loop(){
     digitalWrite(LED_A, HIGH);
   } 
   
-  Serial.print(millis());
-  Serial.print(" X:");
-  Serial.print(accellOutput[0]);
-  Serial.print(" Y:");
-  Serial.print(accellOutput[1]);
-  Serial.print(" Z:");
-  Serial.println(accellOutput[2]);
-  
-  if(Serial.read()=='c') {
-    calibrate();
-  }  
+  if(millis()-lastSerialLog > 1000)
+  {
+    Serial.print(" X:");
+    Serial.print(accellOutput[0]);
+    Serial.print(" / ");
+    Serial.print(gravityOutput[0]);
+    Serial.print(" Y:");
+    Serial.print(accellOutput[1]);
+    Serial.print(" / ");
+    Serial.print(gravityOutput[1]);
+    Serial.print(" Z:");
+    Serial.print(accellOutput[2]);
+    Serial.print(" / ");
+    Serial.print(gravityOutput[2]);    
+    Serial.print(" FWD:");
+    Serial.println(forwardAccelleration);
+    
+    if(Serial.read()=='c') {
+      calibrate();
+    }  
+    
+    lastSerialLog = millis();
+  }
 }
 
 
