@@ -15,6 +15,7 @@ And the final prototype assembled and ready to go. The power switch is on the ba
 
 ![Proto](Documentation/assembled.jpg)
 
+There a vide available showing the device in action, it's unfortunately rather dark, I might shoot another one if I have time: http://youtu.be/WYHeaFL7syk
 
 Challenges
 ==========
