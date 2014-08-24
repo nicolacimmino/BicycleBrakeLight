@@ -7,6 +7,15 @@ The picture below shows the prototype used. The larger board is an Arduino Mini 
 
 ![Proto](Documentation/proto.jpg)
 
+The same protobaord slightly modified and fit inside a bicycle tail light from which I removed the existing LEDs:
+
+![Proto](Documentation/assembled_open.jpg)
+
+And the final prototype assembled and ready to go. The power switch is on the back side, not visbile here.
+
+![Proto](Documentation/assembled.jpg)
+
+
 Challenges
 ==========
 
