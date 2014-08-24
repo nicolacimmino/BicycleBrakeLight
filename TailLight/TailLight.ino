@@ -22,9 +22,9 @@
 #include <EEPROM.h>
 
 // X-Axis is parallel to the direction of travel.
-#define ACC_X_PIN 0
-#define ACC_Y_PIN 1
-#define ACC_Z_PIN 2
+#define ACC_X_PIN A1
+#define ACC_Y_PIN A2
+#define ACC_Z_PIN A0
 
 // We use an IIR (Infinite Impulse Response) filter to filter the accelleration.
 // The filter taps have been calculated in Octave.
@@ -43,9 +43,9 @@ int accellSamplesBufferIndex = 0;
 
 // We use an IIR (Infinite Impulse Response) filter to separate gravity effects from bike accelleration.
 // This is needed to remove the forward component of gravitational accelleration when we are on an incline.
-// This filter has a much lower cut-off frequency consideting slope is channhing more slowly than braking
+// This filter has a much lower cut-off frequency considering slope is changing more slowly than braking
 //  effort. This filter has a lower order than the other as a 3rd order one would have had too small forward
-//  coefficient values that woul have had issues with the limited precision of Arduino float.
+//  coefficient values that would have had issues with the limited precision of Arduino float.
 // The filter taps have been calculated in Octave.
 // The Low Pass filter is set for:
 // Sampling frequency: 100Hz
@@ -70,17 +70,14 @@ long lastSampleTime = 0;
 long lastSerialLog = 0;
 
 // Amount of samples averaged during calibration
-#define calibrationSamples 100
+#define calibrationSamples 20
 
 // Pins assignement.
 #define ACCELEROMETER_PWR 6
 #define ACCELEROMETER_VIN 13
 #define ACCELEROMETER_GND A3
-#define ACCELEROMETER_X A2
-#define ACCELEROMETER_Y A1
-#define ACCELEROMETER_Z A0
-#define LED_A 12
-#define LED_K 11
+#define LED_A 3
+#define LED_K 4
 #define LED_STATUS 13
 
 // EEPROM map.
@@ -109,59 +106,15 @@ void setup(){
   digitalWrite(ACCELEROMETER_VIN, HIGH);
   
   // Accelerometer outputs
-  pinMode(ACCELEROMETER_X, INPUT);
-  pinMode(ACCELEROMETER_Y, INPUT);
-  pinMode(ACCELEROMETER_Z, INPUT);
+  pinMode(ACC_X_PIN, INPUT);
+  pinMode(ACC_Y_PIN, INPUT);
+  pinMode(ACC_Z_PIN, INPUT);
 
   // LED off.
   pinMode(LED_A, OUTPUT);
   digitalWrite(LED_A, LOW);
   pinMode(LED_K, OUTPUT);
   digitalWrite(LED_K, LOW);
-       
-  Serial.begin(9600);
-}
-
-void calibrate()
-{
-  Serial.println("Calibrating....");
-  
-  long startTime = millis();  
-  
-  int maxValues[] = { 0, 0, 0 };
-  int minValues[] = { 1024, 1024, 1024 };
-  
-  // Calibrate for 30s
-  while(millis() - startTime < 30000)
-  {
-    // Blink status at 1Hz during calibration.
-    digitalWrite(LED_STATUS, ((millis() % 1000)<500)?HIGH:LOW);
-    
-    for(int axis=0; axis<3; axis++) {
-      long total = 0;
-      for(int sample=0; sample<calibrationSamples; sample++) {
-        total += analogRead(accelerometerPins[axis])/2;
-        delay(samplingInterval);
-      }
-      int average = total/calibrationSamples;
-      if(average > maxValues[axis]) {
-        maxValues[axis] = average;
-      }
-      
-      if(average < minValues[axis]) {
-        minValues[axis] = average;
-      }
-    }
-  }
-  
-  // Sore in EEPROM. We use locations from EEPROM_CALIBRAION_BASE as:
-  // ZeroX, KX, ZeroY, KY, ZeroZ, KZ
-  // Where Zero* is the value corresponding to 0g on the axis and
-  // K* is the value representing 1g.
-  for(int axis=0; axis<3; axis++) {
-    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2), minValues[axis]+(maxValues[axis]-minValues[axis])/2);
-    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2)+1, (maxValues[axis]-minValues[axis])/2);
-  }
   
   for(int axis=0; axis<3; axis++) 
   {
@@ -177,8 +130,49 @@ void calibrate()
       accellOutputSamples[axis][sampleIndex] = 0;
     }
   }
-  // Blink status at 1Hz during calibration.
-  digitalWrite(LED_STATUS, LOW);
+  
+  Serial.begin(9600);
+ 
+}
+
+void calibrate()
+{
+  Serial.println("Calibrating....");
+  
+  long startTime = millis();  
+  
+  int maxValues[] = { 0, 0, 0 };
+  int minValues[] = { 1024, 1024, 1024 };
+  
+  // Calibrate for 30s
+  while(millis() - startTime < 30000)
+  {
+    
+    for(int axis=0; axis<3; axis++) {
+      long total = 0;
+      for(int sample=0; sample<calibrationSamples; sample++) {
+        total += analogRead(accelerometerPins[axis])/2;
+        delay(samplingInterval);
+      }
+      int average = total/calibrationSamples;      
+      if(average > maxValues[axis]) {
+        maxValues[axis] = average;
+      }
+      
+      if(average < minValues[axis]) {
+        minValues[axis] = average;
+      }
+    }
+  }
+    
+  // Sore in EEPROM. We use locations from EEPROM_CALIBRAION_BASE as:
+  // ZeroX, KX, ZeroY, KY, ZeroZ, KZ
+  // Where Zero* is the value corresponding to 0g on the axis and
+  // K* is the value representing 1g.
+  for(int axis=0; axis<3; axis++) {
+    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2), (minValues[axis]+((maxValues[axis]-minValues[axis])/2))); 
+    EEPROM.write(EEPROM_CALIBRAION_BASE+(axis*2)+1, ((maxValues[axis]-minValues[axis])/2));
+  }
   
   Serial.println("Calibration done.");
     
@@ -197,7 +191,7 @@ void loop(){
     
     // Get the current reading and convert to g according to the calibration table.
     float currentReading = analogRead(accelerometerPins[axis])/2;
-    currentReading = (currentReading-EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2)))/(float)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
+    currentReading = (currentReading-(EEPROM.read(EEPROM_CALIBRAION_BASE+(axis*2))))/(float)EEPROM.read(EEPROM_CALIBRAION_BASE+1+(axis*2));
     
     // Store the current reading at the current position of the circular buffer.
     accellInputSamples[axis][accellSamplesBufferIndex] = currentReading; 
@@ -233,7 +227,7 @@ void loop(){
   
  
   // Work out the gravity component that is affecting the X-Axis (forward)
-  float forwardAccelleration = accellOutput[Z_AXIS] * gravityOutput[X_AXIS] - accellOutput[X_AXIS] * gravityOutput[Z_AXIS];
+  float forwardAccelleration = accellOutput[X_AXIS] * gravityOutput[Z_AXIS] - accellOutput[Z_AXIS] * gravityOutput[X_AXIS];
   
   // We have some hytesresis in the detector. We consider
   //  braking above 0.05g and we get out of the breaking status
