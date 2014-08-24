@@ -49,12 +49,17 @@ Now that the sample fequency was set it was clear that a FIR filter wouldn't hav
 
 Road tests gave amazing results with very short delay in detecting the barking. Also potholes and rough road didn't give false readings at all.
 
+Slope Compensation
+============
 
+So far tests were all carried out on level roads. Going down or uphill poses a problem though as part of the gravity goes to the forward motion axis adding or subtracting from the braking acceleration. Research showed that this issue is usually solved with so called 6 axis accelerometers in which the usual 3 axes accelerometer is supplemented by a 3 axes gyroscope. Cheaper systems that make use of 3 axes accelerometers though estimate the gravity component by having two low pass filters one of which is set to a lower frequency to separate gravity. This is based on the assumption that motion acceleration changes more slowly than tilt. This is not true in all applications but in this case it seems reasonable as roads will change slope more slowly than the braking takes place.
+
+After some tests a 0.1 Hz low pass filter seemed to give the best results so I went for that in final design. I had to make this a 2nd order one though as a 3rd order gave too small coefficients that were an issue due to the limited precision of floats on an Arduino. This was one more reason to move to IIR filters as this is a noralized cut-off frequency of 0.001!
 
 Brake Detection
 ============
 
-After testing a simple threshold detector I decided to have some hysteresis in the detector to avoid the light to shortly blink only in the beginning of the braking effort. At first I had roughly estimated a threshold of 0.1g. This in practice turned out to be a relatively vigourous brake effort so, experimentally, I dropped the threshold to 0.05g and the release threshold to 0.03g.  
+After testing a simple threshold detector I decided to have some hysteresis in the detector to avoid the light to shortly blink intermittently when the braking effort was near the threahold. At first I had roughly estimated a threshold of 0.1g. This in practice turned out to be a relatively vigourous brake effort so, experimentally, I dropped the threshold to 0.05g and the release threshold to 0.03g.  
 
 Calibration
 ============
