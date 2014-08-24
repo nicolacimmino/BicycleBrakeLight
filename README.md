@@ -3,7 +3,7 @@ Bike Light
 
 The goal of this project is to explore real world applications of accelerometers by designing a bicycle tail light that can light up when the bicycle is slowing down. There are commercial products that do this and at least according to their demo videos seem to work properly, so I have set on a quest to reproduce the device and get it to work in a satisfactory way.
 
-The picture below shows the prototype used. The larger board is an Arduino Mini and the smaller one is an accelerometer breakout board. The green LED is just there to drop the voltage close to the 3.3V required as I didn't have any regulator handy. The actual brake light LED is the clear one visible on the bottom.
+The picture below shows the prototype used. The larger board is an Arduino Mini and the smaller one is an accelerometer breakout board. The brake light LED is the clear one visible on the bottom.
 
 ![Proto](Documentation/proto.jpg)
 
