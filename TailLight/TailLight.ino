@@ -14,10 +14,6 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see http://www.gnu.org/licenses/.
 //
-// Note: the code below always samples and filters all three axes even though
-//  we take decision only based on the axis parallel to the direction of travel.
-//  This is as I am going to use this as more generic code for other applications
-//  that will use all axis.
 
 #include <EEPROM.h>
 
