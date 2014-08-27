@@ -1,5 +1,3 @@
-Bike Light
-=========
 
 The goal of this project is to explore real world applications of accelerometers by designing a bicycle tail light that can light up when the bicycle is slowing down. There are commercial products that do this and at least according to their demo videos seem to work properly, so I have set on a quest to reproduce the device and get it to work in a satisfactory way.
 
