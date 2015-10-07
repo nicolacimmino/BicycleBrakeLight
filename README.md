@@ -15,6 +15,8 @@ And the final prototype assembled and ready to go. The power switch is on the ba
 
 There is a video available showing the device in action, it's unfortunately rather dark, I might shoot another one if I have time: http://youtu.be/WYHeaFL7syk
 
+I have later replaced the two AAA batteries with a small LiPo and USB charging circuit and been using it now on my daily commute trips, which attracted the random comments of fellow cyclists expecially when stopping at road crossings.
+
 Challenges
 ==========
 
