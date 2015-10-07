@@ -69,7 +69,6 @@ long lastSerialLog = 0;
 #define calibrationSamples 20
 
 // Pins assignement.
-#define ACCELEROMETER_PWR 6
 #define ACCELEROMETER_VIN 13
 #define ACCELEROMETER_GND A3
 #define LED_A 3
@@ -91,16 +90,12 @@ float accelerometerPins[] = { ACC_X_PIN, ACC_Y_PIN, ACC_Z_PIN };
 void setup(){
 
   // Power up the acceletometer
-  pinMode(ACCELEROMETER_PWR, OUTPUT);
-  digitalWrite(ACCELEROMETER_PWR, HIGH);
-  pinMode(ACCELEROMETER_GND, OUTPUT);
-  digitalWrite(ACCELEROMETER_GND, LOW);
-  
-  // Give 5v on the accelerometer Vin, this is used
-  //  to generate the analog outputs.
   pinMode(ACCELEROMETER_VIN, OUTPUT);
   digitalWrite(ACCELEROMETER_VIN, HIGH);
-  
+
+  pinMode(ACCELEROMETER_GND, OUTPUT);
+  digitalWrite(ACCELEROMETER_GND, LOW);
+    
   // Accelerometer outputs
   pinMode(ACC_X_PIN, INPUT);
   pinMode(ACC_Y_PIN, INPUT);
@@ -233,7 +228,7 @@ void loop(){
   {
     digitalWrite(LED_A, LOW);
   }
-  if(forwardAccelleration < -0.05)
+  if(forwardAccelleration < -0.08)
   {
     digitalWrite(LED_A, HIGH);
   } 
